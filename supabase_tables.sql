@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS youtube_comments (
     id SERIAL PRIMARY KEY,
     created_at TIMESTAMPTZ NOT NULL,
     author_name TEXT NOT NULL,
-    comment_text TEXT NOT NULL
+    comment_text TEXT NOT NULL,
+    like_count INTEGER DEFAULT 0
 );
 
 -- Index untuk performa query

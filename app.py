@@ -135,7 +135,8 @@ def get_all_comments(video_id):
                 comments.append({
                     'created_at': comment['publishedAt'],
                     'author_name': comment['authorDisplayName'],
-                    'comment_text': comment['textDisplay']
+                    'comment_text': comment['textDisplay'],
+                    'like_count': comment.get('likeCount', 0)  # Ambil jumlah like
                 })
             
             # Update progress
@@ -169,7 +170,8 @@ def save_comments_to_supabase(comments):
                 comments_data.append({
                     'created_at': created_at.isoformat(),
                     'author_name': comment['author_name'],
-                    'comment_text': comment['comment_text']
+                    'comment_text': comment['comment_text'],
+                    'like_count': comment.get('like_count', 0)
                 })
             
             # Insert comments in batches
@@ -231,7 +233,26 @@ def get_saved_videos_count():
     except Exception as e:
         return 0
 
+def get_total_likes():
+    """Get total likes from all saved comments"""
+    if not supabase:
+        return 0
+    try:
+        result = supabase.table('youtube_comments').select('like_count').execute()
+        if result.data:
+            return sum(comment.get('like_count', 0) for comment in result.data)
+        return 0
+    except Exception as e:
+        return 0
+
 def get_all_saved_comments():
+    """Get all saved comments from Supabase"""
+    try:
+        result = supabase.table('youtube_comments').select('*').order('created_at', desc=True).execute()
+        return result.data
+    except Exception as e:
+        st.error(f"Error getting saved comments: {str(e)}")
+        return []
     """Get all saved comments from Supabase"""
     try:
         result = supabase.table('youtube_comments').select('*').order('created_at', desc=True).execute()
@@ -364,13 +385,14 @@ def main():
             column_config={
                 "created_at": "Waktu",
                 "author_name": "Nama Penulis",
-                "comment_text": "Komentar"
+                "comment_text": "Komentar",
+                "like_count": "👍 Likes"
             }
         )
         
         # Statistics section - Only show after results
         st.header("📈 Statistik Database")
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
             total_videos = get_saved_videos_count()
@@ -379,6 +401,10 @@ def main():
         with col2:
             total_comments = get_saved_comments_count()
             st.metric("Total Komentar", total_comments)
+        
+        with col3:
+            total_likes = get_total_likes()
+            st.metric("👍 Total Likes", total_likes)
         
         # Display all saved comments - Only show after results
         if st.checkbox("📋 Tampilkan Semua Komentar Tersimpan"):
@@ -390,13 +416,14 @@ def main():
                 df_all['created_at'] = pd.to_datetime(df_all['created_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
                 
                 st.dataframe(
-                    df_all[['created_at', 'author_name', 'comment_text']],
+                    df_all[['created_at', 'author_name', 'comment_text', 'like_count']],
                     use_container_width=True,
                     height=400,
                     column_config={
                         "created_at": "Waktu",
                         "author_name": "Nama Penulis",
-                        "comment_text": "Komentar"
+                        "comment_text": "Komentar",
+                        "like_count": "👍 Likes"
                     }
                 )
             else:
