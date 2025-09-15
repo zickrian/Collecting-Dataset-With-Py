@@ -73,7 +73,9 @@ def check_video_exists(video_id):
         return False
     try:
         result = supabase.table('youtube_videos').select('video_id').eq('video_id', video_id).execute()
-        return len(result.data) > 0
+        exists = len(result.data) > 0
+        print(f"Video {video_id} exists: {exists}")
+        return exists
     except Exception as e:
         print(f"Check video error: {e}")
         return False
@@ -83,13 +85,34 @@ def insert_video_id(video_id):
     if not supabase:
         return False
     try:
-        # Insert ke tabel youtube_videos - tidak perlu specify inserted_at karena default
-        result = supabase.table('youtube_videos').insert({'video_id': video_id}).execute()
+        # Insert tanpa ID, biarkan SERIAL auto-increment
+        result = supabase.table('youtube_videos').insert({
+            'video_id': video_id
+        }).execute()
         print(f"Insert result: {result}")
         return True
     except Exception as e:
         print(f"Insert video error: {e}")
-        st.error(f"Error menyimpan video ID: {str(e)}")
+        error_str = str(e)
+        
+        # Jika error karena duplicate video_id (expected behavior)
+        if "video_id" in error_str and ("duplicate" in error_str or "unique constraint" in error_str):
+            print("Video already exists (duplicate video_id) - this is expected behavior")
+            st.warning("⚠️ Link sudah pernah dimasukkan - video sudah pernah diproses")
+            return True
+            
+        # Jika error karena duplicate primary key ID (sequence issue)
+        if "youtube_videos_pkey" in error_str or ("Key (id)" in error_str and "already exists" in error_str):
+            st.error("❌ Database sequence error! Jalankan command ini di Supabase SQL Editor:")
+            st.code("""
+-- Set sequence ke MAX(id) yang ada, jadi next insert = MAX(id) + 1
+SELECT setval('youtube_videos_id_seq', (SELECT COALESCE(MAX(id), 0) FROM youtube_videos));
+            """)
+            st.info("💡 Command ini akan set sequence ke nilai terakhir, jadi insert berikutnya akan pakai MAX(id) + 1")
+            return False
+        
+        # Error lain
+        st.error(f"❌ Error menyimpan video ID: {error_str}")
         return False
 
 def get_video_title(video_id):
@@ -324,7 +347,7 @@ def main():
         # Check if video already exists
         if supabase and "✅" in supabase_status:
             if check_video_exists(video_id):
-                st.warning("⚠️ Video sudah pernah diproses")
+                st.warning("⚠️ Link sudah pernah dimasukkan - video sudah pernah diproses")
                 return
             
             # Insert video ID to database WAJIB
